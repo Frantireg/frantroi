@@ -1,0 +1,454 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Generador de CUPS (Archivo Único)</title>
+        <style>
+            /* PALETA 60-30-10 (Pastel) */
+            :root {
+                /* 60% Dominante: Blanco Roto (Fondo de Recuadros/Contenedor) */
+                --color-dominante: #F5F5F5;
+                /* 30% Secundario: Lavanda Muy Claro (Fondo de Página) */
+                --color-secundario: #E8EAF6;
+                /* 10% Acento: Menta Suave (Botones Copiar, Borde) */
+                --color-acento: #A8DAD7;
+                /* Contraste: Púrpura del Logo (Títulos, Botón Generar) */
+                --color-contraste: #6A5ACD;
+                /* Gris Suave (Texto general) */
+                --color-texto-general: #555555;
+            }
+
+
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                margin: 0;
+                padding: 20px;
+                background-color: var(--color-secundario);
+            }
+            .header {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin-bottom: 20px;
+            }
+            .logo {
+                width: 50px;
+                height: 50px;
+                margin-right: 15px;
+                background-color: var(--color-contraste);
+                border-radius: 50%;
+                overflow: hidden;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .logo img {
+                /* IMPORTANTE: Ajusta el nombre del archivo del logo aquí */
+                content: url("Captura de pantalla 2025-10-09 183230.png");
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+            }
+            .container {
+                max-width: 900px;
+                margin: 30px auto;
+                padding: 30px;
+                background-color: var(--color-dominante);
+                border-radius: 15px;
+                box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+            }
+            h1 {
+                color: var(--color-contraste);
+                text-align: center;
+                border-bottom: 2px solid var(--color-acento);
+                padding-bottom: 10px;
+                margin-bottom: 20px;
+            }
+            h2 {
+                color: var(--color-contraste);
+                font-size: 1.3em;
+                margin-top: 20px;
+                padding-bottom: 5px;
+                border-bottom: 1px dashed var(--color-acento);
+            }
+            .input-group {
+                display: flex;
+                gap: 15px;
+                align-items: center;
+                margin-bottom: 20px;
+            }
+            .input-group label {
+                font-weight: bold;
+                color: var(--color-contraste);
+                white-space: nowrap;
+            }
+            input[type="text"], input[type="number"] {
+                padding: 12px;
+                border: 1px solid var(--color-contraste);
+                border-radius: 8px;
+                font-size: 1em;
+                box-sizing: border-box;
+            }
+            input[type="text"] { flex: 2; }
+            input[type="number"] { flex: 1; max-width: 120px; text-align: center; }
+
+
+            button {
+                padding: 12px 20px;
+                cursor: pointer;
+                background-color: var(--color-contraste);
+                color: white;
+                border: none;
+                border-radius: 8px;
+                font-size: 1em;
+                transition: background-color 0.3s;
+            }
+            button:hover { background-color: #5d49b2; }
+
+
+            #statusMessage {
+                color: #d9534f;
+                margin-top: 15px;
+                font-weight: bold;
+            }
+            .results-grid {
+                display: flex;
+                gap: 20px;
+                margin-top: 20px;
+            }
+            .column {
+                flex: 1;
+                padding: 15px;
+                border-radius: 10px;
+                background-color: var(--color-secundario);
+                box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.05);
+            }
+            .cups-item {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 10px;
+                margin-bottom: 8px;
+                background-color: white;
+                border: 1px solid var(--color-acento);
+                border-radius: 6px;
+            }
+            .cups-info {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            }
+            .list-number {
+                font-weight: bold;
+                color: white;
+                background-color: var(--color-contraste);
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-size: 0.9em;
+            }
+            .cups-code {
+                font-family: monospace;
+                font-size: 1.05em;
+                color: var(--color-contraste);
+                font-weight: bold;
+            }
+            .copy-btn {
+                padding: 6px 10px;
+                background-color: var(--color-acento);
+                color: var(--color-texto-general);
+                font-size: 0.9em;
+            }
+            .copy-btn:hover { background-color: #88c8c5; }
+
+
+            .original-cups {
+                background-color: #FFDDAA;
+                color: var(--color-texto-general);
+                padding: 15px;
+                border-radius: 10px;
+                text-align: center;
+                margin-top: 15px;
+                font-size: 1.2em;
+                font-weight: bold;
+            }
+
+
+            /* NOTIFICACIÓN TEMPORAL (Snackbar) */
+            #snackbar {
+                visibility: hidden;
+                min-width: 280px;
+                margin-left: -140px;
+                background-color: var(--color-contraste);
+                color: white;
+                text-align: center;
+                border-radius: 8px;
+                padding: 16px;
+                position: fixed;
+                z-index: 1000;
+                left: 50%;
+                bottom: 30px;
+                font-size: 1em;
+                font-weight: bold;
+                box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            }
+
+
+            #snackbar.show {
+                visibility: visible;
+                -webkit-animation: fadein 0.5s, fadeout 0.5s 2.5s;
+                animation: fadein 0.5s, fadeout 0.5s 2.5s;
+            }
+
+
+            @-webkit-keyframes fadein {
+                from {bottom: 0; opacity: 0;}
+                to {bottom: 30px; opacity: 1;}
+            }
+            @keyframes fadein {
+                from {bottom: 0; opacity: 0;}
+                to {bottom: 30px; opacity: 1;}
+            }
+
+
+            @-webkit-keyframes fadeout {
+                from {bottom: 30px; opacity: 1;}
+                to {bottom: 0; opacity: 0;}
+            }
+            @keyframes fadeout {
+                from {bottom: 30px; opacity: 1;}
+                to {bottom: 0; opacity: 0;}
+            }
+        </style>
+</head>
+<body>
+        <div class="container">
+            <div class="header">
+                <div class="logo">
+                    </div>
+                <h1>Generador de CUPS 💜</h1>
+            </div>
+
+
+            <p>Introduce el CUPS base y la cantidad de códigos anteriores y posteriores que deseas generar.</p>
+
+
+            <div class="input-group">
+                <label for="cupsInput">CUPS Base:</label>
+                <input type="text" id="cupsInput" placeholder="Ej: ES0022000000000000XX" value="ES0022000000000000XX">
+           
+                <label for="quantityInput">Cantidad:</label>
+                <input type="number" id="quantityInput" value="10" min="1" max="50">
+           
+                <button onclick="generarCups()">Generar</button>
+            </div>
+            <div id="statusMessage"></div>
+            <div id="originalCupsDisplay" class="original-cups" style="display: none;"></div>
+
+
+            <hr>
+
+
+            <div class="results-grid">
+                <div class="column">
+                    <h2 id="anterioresTitle">CUPS Anteriores ⬅️</h2>
+                    <div id="anterioresList">
+                        </div>
+                </div>
+                <div class="column">
+                    <h2 id="posterioresTitle">CUPS Posteriores ➡️</h2>
+                    <div id="posterioresList">
+                        </div>
+                </div>
+            </div>
+        </div>
+
+
+        <div id="snackbar"></div>
+
+
+        <script>
+            // Obtener referencias del DOM
+            const cupsInput = document.getElementById('cupsInput');
+            const quantityInput = document.getElementById('quantityInput');
+            const anterioresList = document.getElementById('anterioresList');
+            const posterioresList = document.getElementById('posterioresList');
+            const originalesDisplay = document.getElementById('originalCupsDisplay');
+            const statusMessage = document.getElementById('statusMessage');
+            const anterioresTitle = document.getElementById('anterioresTitle');
+            const posterioresTitle = document.getElementById('posterioresTitle');
+            const snackbar = document.getElementById('snackbar');
+
+
+            // Expresión regular y tabla de control
+            const CUPS_REGEX = /^([A-Z]{2})(\d{4})(\d{12})([A-Z]{2})([A-Z0-9]{0,2})?/;
+            const CUPS_CHAR_TABLE = "TRWAGMYFPDXBNJZSQVHLCKE";
+
+
+            /**
+             * Muestra la notificación temporalmente (Snackbar).
+             */
+            function showSnackbar(message) {
+                snackbar.textContent = message;
+                snackbar.classList.add('show');
+           
+                setTimeout(function(){
+                    snackbar.classList.remove('show');
+                }, 3000);
+            }
+
+
+            /**
+             * Calcula los 2 dígitos de control (EE) para los 16 dígitos numéricos.
+             */
+            function calcularDigitosControl(dddccccccccccc) {
+                const numero16Digitos = BigInt(dddccccccccccc);
+           
+                // R0 = DDDDCCCCCCCCCCCC Modulo 529
+                const R0 = Number(numero16Digitos % 529n);
+
+
+                // C = parte entera de R0 / 23; R = R0 Modulo 23
+                const C = Math.floor(R0 / 23);
+                const R = R0 % 23;
+
+
+                // Transformar C y R por la tabla
+                const letraC = CUPS_CHAR_TABLE.charAt(C);
+                const letraR = CUPS_CHAR_TABLE.charAt(R);
+
+
+                return letraC + letraR;
+            }
+
+
+            /**
+             * Copia un texto dado al portapapeles.
+             */
+            async function copiarAlPortapapeles(textToCopy) {
+                try {
+                    await navigator.clipboard.writeText(textToCopy);
+                    showSnackbar(`✅ CUPS copiado: ${textToCopy}`);
+                } catch (err) {
+                    console.error('Error al copiar el texto: ', err);
+                    alert('❌ Error al intentar copiar al portapapeles. Asegúrate de que tu navegador lo permite (la página debe ser servida por HTTPS o localhost).');
+                }
+            }
+
+
+            /**
+             * Función auxiliar para calcular el CUPS completo (parte del BigInt y control).
+             */
+            function calculateFullCups(baseNumber, countryCode, distributorCode, optionalEnd) {
+                const newNumericPart = baseNumber.toString().padStart(12, '0');
+                const dddccccccccccc = distributorCode + newNumericPart;
+                const newControlDigits = calcularDigitosControl(dddccccccccccc);
+           
+                return `${countryCode}${distributorCode}${newNumericPart}${newControlDigits}${optionalEnd || ''}`;
+            }
+
+
+            /**
+             * Función principal para generar y mostrar los CUPS secuenciales.
+             */
+            function generarCups() {
+                const fullCups = cupsInput.value.trim().toUpperCase();
+                let quantity = parseInt(quantityInput.value, 10);
+           
+                if (isNaN(quantity) || quantity < 1 || quantity > 100) {
+                    quantity = 10;
+                    quantityInput.value = 10;
+                    statusMessage.textContent = 'Cantidad ajustada a 10 (mín: 1, máx: 100).';
+                } else {
+                    statusMessage.textContent = '';
+                }
+           
+                // Limpiar resultados anteriores
+                anterioresList.innerHTML = '';
+                posterioresList.innerHTML = '';
+                originalesDisplay.style.display = 'none';
+           
+                // Actualizar títulos
+                anterioresTitle.textContent = `${quantity} CUPS Anteriores ⬅️`;
+                posterioresTitle.textContent = `${quantity} CUPS Posteriores ➡️`;
+
+
+                const match = fullCups.match(CUPS_REGEX);
+
+
+                if (!match) {
+                    statusMessage.textContent = 'Formato CUPS inválido. Debe seguir el patrón: LL DDDD CCCCCCCCCC EE (Ej: ES0022000000000000XX)';
+                    return;
+                }
+
+
+                const [_, countryCode, distributorCode, numericPart, originalControlDigits, optionalEnd] = match;
+                const baseNumber = parseInt(numericPart, 10);
+           
+                // 1. Procesar CUPS anteriores (El índice 'i' es el número de lista.)
+                for (let i = 1; i <= quantity; i++) {
+                    const itemNumber = baseNumber - i;
+                    const newCups = calculateFullCups(itemNumber, countryCode, distributorCode, optionalEnd);
+                    displayCupsItem(newCups, anterioresList, i);
+                }
+           
+                // 2. Procesar CUPS posteriores (El índice 'i' es el número de lista.)
+                for (let i = 1; i <= quantity; i++) {
+                    const itemNumber = baseNumber + i;
+                    const newCups = calculateFullCups(itemNumber, countryCode, distributorCode, optionalEnd);
+                    displayCupsItem(newCups, posterioresList, i);
+                }
+
+
+                // 3. Mostrar el CUPS Original
+                originalesDisplay.textContent = `CUPS Original: ${fullCups}`;
+                originalesDisplay.style.display = 'block';
+            }
+
+
+            /**
+             * Crea y añade un elemento de lista para un CUPS.
+             */
+            function displayCupsItem(cupsCode, targetList, listNumber) {
+                const itemDiv = document.createElement('div');
+                itemDiv.classList.add('cups-item');
+
+
+                const cupsInfo = document.createElement('div');
+                cupsInfo.classList.add('cups-info');
+           
+                // Número de lista
+                const numberSpan = document.createElement('span');
+                numberSpan.classList.add('list-number');
+                numberSpan.textContent = listNumber;
+
+
+                // Código CUPS
+                const cupsSpan = document.createElement('span');
+                cupsSpan.classList.add('cups-code');
+                cupsSpan.textContent = cupsCode;
+
+
+                cupsInfo.appendChild(numberSpan);
+                cupsInfo.appendChild(cupsSpan);
+           
+                // Botón de copia
+                const copyButton = document.createElement('button');
+                copyButton.classList.add('copy-btn');
+                copyButton.textContent = 'Copiar';
+                copyButton.onclick = () => copiarAlPortapapeles(cupsCode);
+
+
+                itemDiv.appendChild(cupsInfo);
+                itemDiv.appendChild(copyButton);
+           
+                targetList.appendChild(itemDiv);
+            }
+
+
+            // Hacemos la función de copia y generación accesible globalmente
+            window.copiarAlPortapapeles = copiarAlPortapapeles;
+            window.generarCups = generarCups;
+        </script>
+</body>
+</html>
