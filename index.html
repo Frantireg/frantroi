@@ -10,7 +10,7 @@
                 /* 60% Dominante: Blanco Roto (Fondo de Recuadros/Contenedor) */
                 --color-dominante: #F5F5F5;
                 /* 30% Secundario: Lavanda Muy Claro (Fondo de Página) */
-                --color-secundario: #E8EAF6;
+                --color-secundARIO: #E8EAF6;
                 /* 10% Acento: Menta Suave (Botones Copiar, Borde) */
                 --color-acento: #A8DAD7;
                 /* Contraste: Púrpura del Logo (Títulos, Botón Generar) */
@@ -106,6 +106,14 @@
             }
             button:hover { background-color: #5d49b2; }
 
+            button.reset-btn {
+                background-color: var(--color-acento);
+                color: var(--color-texto-general);
+            }
+            button.reset-btn:hover {
+                background-color: #88c8c5;
+            }
+
 
             #statusMessage {
                 color: #d9534f;
@@ -153,6 +161,16 @@
                 color: var(--color-contraste);
                 font-weight: bold;
             }
+            
+            .nota-input {
+                padding: 2px 6px; /* Reducido el padding vertical */
+                border: 1px solid var(--color-acento);
+                border-radius: 6px;
+                font-size: 0.9em;
+                width: 120px; 
+                box-sizing: border-box; 
+            }
+
             .copy-btn {
                 padding: 6px 10px;
                 background-color: var(--color-acento);
@@ -160,6 +178,18 @@
                 font-size: 0.9em;
             }
             .copy-btn:hover { background-color: #88c8c5; }
+
+            /* --- MODIFICADO: Estado "Copiado" --- */
+            .copy-btn.copied {
+                background-color: var(--color-secundario);
+                color: var(--color-texto-general);
+                border: 1px solid var(--color-acento);
+                /* cursor: default; <-- ELIMINADO para que siga siendo 'pointer' */
+            }
+            .copy-btn.copied:hover {
+                background-color: #88c8c5; /* <-- RESTAURADO el hover normal */
+            }
+            /* --- FIN MODIFICADO --- */
 
 
             .original-cups {
@@ -235,12 +265,14 @@
 
             <div class="input-group">
                 <label for="cupsInput">CUPS Base:</label>
-                <input type="text" id="cupsInput" placeholder="Ej: ES0022000000000000XX" value="ES0022000000000000XX">
+                <input type="text" id="cupsInput" placeholder="Ej: ES0022000000000000" value="ES0022000000000000XX">
            
                 <label for="quantityInput">Cantidad:</label>
                 <input type="number" id="quantityInput" value="10" min="1" max="50">
            
                 <button onclick="generarCups()">Generar</button>
+                
+                <button onclick="restablecerTodo()" class="reset-btn">Restablecer</button>
             </div>
             <div id="statusMessage"></div>
             <div id="originalCupsDisplay" class="original-cups" style="display: none;"></div>
@@ -280,8 +312,14 @@
             const snackbar = document.getElementById('snackbar');
 
 
-            // Expresión regular y tabla de control
-            const CUPS_REGEX = /^([A-Z]{2})(\d{4})(\d{12})([A-Z]{2})([A-Z0-9]{0,2})?/;
+            /* REGEX:
+               Grupo 1: LL (ES)
+               Grupo 2: DDDD (0022)
+               Grupo 3: CCCCCCCCCC (000000000000)
+               (Grupo no capturado): EE (XX) - Dígitos de control opcionales (?:[A-Z]{2})?
+               Grupo 4: Final opcional (PF, 01, etc.) ([A-Z0-9]{0,2})?
+            */
+            const CUPS_REGEX = /^([A-Z]{2})(\d{4})(\d{12})(?:[A-Z]{2})?([A-Z0-9]{0,2})?/;
             const CUPS_CHAR_TABLE = "TRWAGMYFPDXBNJZSQVHLCKE";
 
 
@@ -325,10 +363,16 @@
             /**
              * Copia un texto dado al portapapeles.
              */
-            async function copiarAlPortapapeles(textToCopy) {
+            async function copiarAlPortapapeles(textToCopy, btnElement) {
                 try {
                     await navigator.clipboard.writeText(textToCopy);
                     showSnackbar(`✅ CUPS copiado: ${textToCopy}`);
+                    
+                    if (btnElement) {
+                        btnElement.classList.add('copied');
+                        btnElement.textContent = 'Copiado ✔';
+                    }
+
                 } catch (err) {
                     console.error('Error al copiar el texto: ', err);
                     alert('❌ Error al intentar copiar al portapapeles. Asegúrate de que tu navegador lo permite (la página debe ser servida por HTTPS o localhost).');
@@ -377,12 +421,11 @@
 
 
                 if (!match) {
-                    statusMessage.textContent = 'Formato CUPS inválido. Debe seguir el patrón: LL DDDD CCCCCCCCCC EE (Ej: ES0022000000000000XX)';
+                    statusMessage.textContent = 'Formato CUPS inválido. Debe empezar con LLDDDDCCCCCCCCCCCC (18 caracteres).';
                     return;
                 }
 
-
-                const [_, countryCode, distributorCode, numericPart, originalControlDigits, optionalEnd] = match;
+                const [_, countryCode, distributorCode, numericPart, optionalEnd] = match;
                 const baseNumber = parseInt(numericPart, 10);
            
                 // 1. Procesar CUPS anteriores (El índice 'i' es el número de lista.)
@@ -399,10 +442,35 @@
                     displayCupsItem(newCups, posterioresList, i);
                 }
 
-
+                
                 // 3. Mostrar el CUPS Original
-                originalesDisplay.textContent = `CUPS Original: ${fullCups}`;
+                const completeBaseCups = calculateFullCups(baseNumber, countryCode, distributorCode, optionalEnd);
+                originalesDisplay.textContent = `CUPS Original: ${completeBaseCups}`;
                 originalesDisplay.style.display = 'block';
+            }
+
+            
+            /**
+             * Función para restablecer la interfaz
+             */
+            function restablecerTodo() {
+                // Restablecer valores de entrada a sus valores por defecto
+                cupsInput.value = 'ES0022000000000000XX'; 
+                quantityInput.value = '10';
+
+                // Limpiar listas de resultados
+                anterioresList.innerHTML = '';
+                posterioresList.innerHTML = '';
+
+                // Limpiar mensaje de estado
+                statusMessage.textContent = '';
+
+                // Ocultar el display del CUPS original
+                originalesDisplay.style.display = 'none';
+
+                // Restablecer títulos de las columnas
+                anterioresTitle.textContent = 'CUPS Anteriores ⬅️';
+                posterioresTitle.textContent = 'CUPS Posteriores ➡️';
             }
 
 
@@ -432,11 +500,21 @@
                 cupsInfo.appendChild(numberSpan);
                 cupsInfo.appendChild(cupsSpan);
            
+                // Campo de Notas
+                const notaInput = document.createElement('input');
+                notaInput.type = 'text';
+                notaInput.classList.add('nota-input');
+                notaInput.placeholder = 'Nota...';
+                notaInput.maxLength = 12;
+                cupsInfo.appendChild(notaInput);
+
+
                 // Botón de copia
                 const copyButton = document.createElement('button');
                 copyButton.classList.add('copy-btn');
                 copyButton.textContent = 'Copiar';
-                copyButton.onclick = () => copiarAlPortapapeles(cupsCode);
+                
+                copyButton.onclick = () => copiarAlPortapapeles(cupsCode, copyButton);
 
 
                 itemDiv.appendChild(cupsInfo);
@@ -446,10 +524,14 @@
             }
 
 
-            // Hacemos la función de copia y generación accesible globalmente
+            // Hacemos las funciones accesibles globalmente
             window.copiarAlPortapapeles = copiarAlPortapapeles;
             window.generarCups = generarCups;
+            window.restablecerTodo = restablecerTodo;
         </script>
 </body>
 
 </html>
+
+</html>
+
