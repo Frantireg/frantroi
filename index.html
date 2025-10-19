@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
         <meta charset="UTF-8">
@@ -114,6 +114,19 @@
                 background-color: #88c8c5;
             }
 
+            .export-controls {
+                text-align: right;
+                margin-bottom: 15px;
+            }
+            button.export-btn {
+                background-color: var(--color-acento);
+                color: var(--color-texto-general);
+                padding: 8px 15px;
+                font-size: 0.9em;
+            }
+            button.export-btn:hover {
+                background-color: #88c8c5;
+            }
 
             #statusMessage {
                 color: #d9534f;
@@ -163,12 +176,14 @@
             }
             
             .nota-input {
-                padding: 2px 6px; /* Reducido el padding vertical */
+                padding: 0 6px;    
                 border: 1px solid var(--color-acento);
-                border-radius: 6px;
-                font-size: 0.9em;
+                border-radius: 4px;  
+                font-size: 0.7em;    
                 width: 120px; 
                 box-sizing: border-box; 
+                font-family: monospace;
+                color: var(--color-texto-general);
             }
 
             .copy-btn {
@@ -179,17 +194,14 @@
             }
             .copy-btn:hover { background-color: #88c8c5; }
 
-            /* --- MODIFICADO: Estado "Copiado" --- */
             .copy-btn.copied {
                 background-color: var(--color-secundario);
                 color: var(--color-texto-general);
                 border: 1px solid var(--color-acento);
-                /* cursor: default; <-- ELIMINADO para que siga siendo 'pointer' */
             }
             .copy-btn.copied:hover {
-                background-color: #88c8c5; /* <-- RESTAURADO el hover normal */
+                background-color: #88c8c5;
             }
-            /* --- FIN MODIFICADO --- */
 
 
             .original-cups {
@@ -249,6 +261,16 @@
                 from {bottom: 30px; opacity: 1;}
                 to {bottom: 0; opacity: 0;}
             }
+
+            /* --- NUEVO: Pie de página discreto --- */
+            .page-footer {
+                text-align: center;
+                padding: 20px;
+                font-size: 0.8em;
+                color: var(--color-texto-general);
+                opacity: 0.7; /* Lo hace semi-transparente */
+            }
+            /* --- FIN NUEVO --- */
         </style>
 </head>
 <body>
@@ -280,6 +302,12 @@
 
             <hr>
 
+            <div class="export-controls">
+                <button id="exportButton" class="export-btn" onclick="copiarTodoAExcel()" style="display: none;">
+                    Copiar Todo para Excel 📋
+                </button>
+            </div>
+
 
             <div class="results-grid">
                 <div class="column">
@@ -293,9 +321,9 @@
                         </div>
                 </div>
             </div>
-        </div>
-
-
+        </div> <footer class="page-footer">
+            Creado por Fran T.
+        </footer>
         <div id="snackbar"></div>
 
 
@@ -310,6 +338,7 @@
             const anterioresTitle = document.getElementById('anterioresTitle');
             const posterioresTitle = document.getElementById('posterioresTitle');
             const snackbar = document.getElementById('snackbar');
+            const exportButton = document.getElementById('exportButton');
 
 
             /* REGEX:
@@ -370,12 +399,55 @@
                     
                     if (btnElement) {
                         btnElement.classList.add('copied');
-                        btnElement.textContent = 'Copiado ✔';
+                        btnElement.textContent = '✔';
                     }
 
                 } catch (err) {
                     console.error('Error al copiar el texto: ', err);
                     alert('❌ Error al intentar copiar al portapapeles. Asegúrate de que tu navegador lo permite (la página debe ser servida por HTTPS o localhost).');
+                }
+            }
+
+
+            /**
+             * Función para copiar todos los datos a Excel
+             */
+            async function copiarTodoAExcel() {
+                let excelData = "";
+                const tab = '\t'; // Carácter Tabulador (clave para separar columnas en Excel)
+                const newline = '\n'; // Salto de línea
+
+                // 1. Obtener todos los items
+                const itemsAnteriores = document.querySelectorAll('#anterioresList .cups-item');
+                const itemsPosteriores = document.querySelectorAll('#posterioresList .cups-item');
+                
+                // 2. Procesar "Anteriores"
+                // (Los procesamos en orden inverso para que al pegarlos queden del más antiguo al más nuevo)
+                const itemsAnterioresArray = Array.from(itemsAnteriores).reverse();
+                itemsAnterioresArray.forEach(item => {
+                    const cups = item.querySelector('.cups-code').textContent;
+                    const nota = item.querySelector('.nota-input').value;
+                    excelData += `${cups}${tab}${nota}${newline}`;
+                });
+
+                // 3. Procesar "Posteriores"
+                itemsPosteriores.forEach(item => {
+                    const cups = item.querySelector('.cups-code').textContent;
+                    const nota = item.querySelector('.nota-input').value;
+                    excelData += `${cups}${tab}${nota}${newline}`;
+                });
+
+                // 4. Copiar al portapapeles
+                if (excelData) {
+                    try {
+                        await navigator.clipboard.writeText(excelData.trim());
+                        showSnackbar('✅ Todos los CUPS y notas copiados para pegar en un Excel.');
+                    } catch (err) {
+                        console.error('Error al copiar todo: ', err);
+                        alert('❌ Error al copiar. Revisa los permisos del navegador.');
+                    }
+                } else {
+                    showSnackbar('ℹ️ No hay datos para copiar.');
                 }
             }
 
@@ -399,10 +471,10 @@
                 const fullCups = cupsInput.value.trim().toUpperCase();
                 let quantity = parseInt(quantityInput.value, 10);
            
-                if (isNaN(quantity) || quantity < 1 || quantity > 100) {
+                if (isNaN(quantity) || quantity < 1 || quantity > 50) { 
                     quantity = 10;
                     quantityInput.value = 10;
-                    statusMessage.textContent = 'Cantidad ajustada a 10 (mín: 1, máx: 100).';
+                    statusMessage.textContent = 'Cantidad ajustada a 10 (mín: 1, máx: 50).';
                 } else {
                     statusMessage.textContent = '';
                 }
@@ -411,6 +483,7 @@
                 anterioresList.innerHTML = '';
                 posterioresList.innerHTML = '';
                 originalesDisplay.style.display = 'none';
+                exportButton.style.display = 'none'; 
            
                 // Actualizar títulos
                 anterioresTitle.textContent = `${quantity} CUPS Anteriores ⬅️`;
@@ -447,6 +520,8 @@
                 const completeBaseCups = calculateFullCups(baseNumber, countryCode, distributorCode, optionalEnd);
                 originalesDisplay.textContent = `CUPS Original: ${completeBaseCups}`;
                 originalesDisplay.style.display = 'block';
+                
+                exportButton.style.display = 'inline-block';
             }
 
             
@@ -467,6 +542,8 @@
 
                 // Ocultar el display del CUPS original
                 originalesDisplay.style.display = 'none';
+
+                exportButton.style.display = 'none';
 
                 // Restablecer títulos de las columnas
                 anterioresTitle.textContent = 'CUPS Anteriores ⬅️';
@@ -504,8 +581,8 @@
                 const notaInput = document.createElement('input');
                 notaInput.type = 'text';
                 notaInput.classList.add('nota-input');
-                notaInput.placeholder = 'Nota...';
-                notaInput.maxLength = 12;
+                notaInput.placeholder = '';
+                notaInput.maxLength = 100;
                 cupsInfo.appendChild(notaInput);
 
 
@@ -528,10 +605,12 @@
             window.copiarAlPortapapeles = copiarAlPortapapeles;
             window.generarCups = generarCups;
             window.restablecerTodo = restablecerTodo;
+            window.copiarTodoAExcel = copiarTodoAExcel;
         </script>
 </body>
 
 </html>
 
 </html>
+
 
