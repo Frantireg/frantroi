@@ -262,15 +262,13 @@
                 to {bottom: 0; opacity: 0;}
             }
 
-            /* --- NUEVO: Pie de página discreto --- */
             .page-footer {
                 text-align: center;
                 padding: 20px;
                 font-size: 0.8em;
                 color: var(--color-texto-general);
-                opacity: 0.7; /* Lo hace semi-transparente */
+                opacity: 0.7;
             }
-            /* --- FIN NUEVO --- */
         </style>
 </head>
 <body>
@@ -324,6 +322,7 @@
         </div> <footer class="page-footer">
             Creado por Fran T.
         </footer>
+
         <div id="snackbar"></div>
 
 
@@ -350,6 +349,9 @@
             */
             const CUPS_REGEX = /^([A-Z]{2})(\d{4})(\d{12})(?:[A-Z]{2})?([A-Z0-9]{0,2})?/;
             const CUPS_CHAR_TABLE = "TRWAGMYFPDXBNJZSQVHLCKE";
+
+            // --- NUEVO: Clave para el contador en localStorage ---
+            const COUNTER_KEY = 'generadorCupsConteo';
 
 
             /**
@@ -422,7 +424,6 @@
                 const itemsPosteriores = document.querySelectorAll('#posterioresList .cups-item');
                 
                 // 2. Procesar "Anteriores"
-                // (Los procesamos en orden inverso para que al pegarlos queden del más antiguo al más nuevo)
                 const itemsAnterioresArray = Array.from(itemsAnteriores).reverse();
                 itemsAnterioresArray.forEach(item => {
                     const cups = item.querySelector('.cups-code').textContent;
@@ -441,7 +442,7 @@
                 if (excelData) {
                     try {
                         await navigator.clipboard.writeText(excelData.trim());
-                        showSnackbar('✅ Todos los CUPS y notas copiados para pegar en un Excel.');
+                        showSnackbar('✅ Todos los CUPS y notas copiados para Excel.');
                     } catch (err) {
                         console.error('Error al copiar todo: ', err);
                         alert('❌ Error al copiar. Revisa los permisos del navegador.');
@@ -466,10 +467,44 @@
 
             /**
              * Función principal para generar y mostrar los CUPS secuenciales.
+             * --- MODIFICADA: Añadida lógica de CONTADOR ---
              */
             function generarCups() {
                 const fullCups = cupsInput.value.trim().toUpperCase();
                 let quantity = parseInt(quantityInput.value, 10);
+
+                // --- NUEVO: Lógica del Contador ---
+                const resetMatch = fullCups.match(/^CONTADOR A (\d+)$/);
+
+                if (resetMatch) {
+                    // Acción: Resetear contador
+                    const newCount = parseInt(resetMatch[1], 10);
+                    if (!isNaN(newCount)) {
+                        localStorage.setItem(COUNTER_KEY, newCount.toString());
+                        statusMessage.textContent = `✅ Contador reseteado a ${newCount}.`;
+                    } else {
+                        statusMessage.textContent = 'Error: El número para resetear no es válido.';
+                    }
+                    anterioresList.innerHTML = '';
+                    posterioresList.innerHTML = '';
+                    originalesDisplay.style.display = 'none';
+                    exportButton.style.display = 'none';
+                    return;
+                }
+
+                if (fullCups === 'CONTADOR') {
+                    // Acción: Mostrar contador
+                    const currentCount = localStorage.getItem(COUNTER_KEY) || '0';
+                    statusMessage.textContent = `Veces usado "Generar": ${currentCount}.`;
+                    // Limpiar resultados para que no confunda
+                    anterioresList.innerHTML = '';
+                    posterioresList.innerHTML = '';
+                    originalesDisplay.style.display = 'none';
+                    exportButton.style.display = 'none';
+                    return;
+                }
+                // --- FIN Lógica del Contador ---
+
            
                 if (isNaN(quantity) || quantity < 1 || quantity > 50) { 
                     quantity = 10;
@@ -498,17 +533,28 @@
                     return;
                 }
 
+                // --- NUEVO: Incrementar contador (SOLO si el CUPS es válido) ---
+                try {
+                    let currentCount = parseInt(localStorage.getItem(COUNTER_KEY) || '0', 10);
+                    currentCount++;
+                    localStorage.setItem(COUNTER_KEY, currentCount.toString());
+                } catch (e) {
+                    console.error("Error al acceder a localStorage: ", e);
+                }
+                // --- FIN Incrementar contador ---
+
+
                 const [_, countryCode, distributorCode, numericPart, optionalEnd] = match;
                 const baseNumber = parseInt(numericPart, 10);
            
-                // 1. Procesar CUPS anteriores (El índice 'i' es el número de lista.)
+                // 1. Procesar CUPS anteriores
                 for (let i = 1; i <= quantity; i++) {
                     const itemNumber = baseNumber - i;
                     const newCups = calculateFullCups(itemNumber, countryCode, distributorCode, optionalEnd);
                     displayCupsItem(newCups, anterioresList, i);
                 }
            
-                // 2. Procesar CUPS posteriores (El índice 'i' es el número de lista.)
+                // 2. Procesar CUPS posteriores
                 for (let i = 1; i <= quantity; i++) {
                     const itemNumber = baseNumber + i;
                     const newCups = calculateFullCups(itemNumber, countryCode, distributorCode, optionalEnd);
@@ -582,7 +628,7 @@
                 notaInput.type = 'text';
                 notaInput.classList.add('nota-input');
                 notaInput.placeholder = '';
-                notaInput.maxLength = 100;
+                notaInput.maxLength = 12;
                 cupsInfo.appendChild(notaInput);
 
 
@@ -611,6 +657,5 @@
 
 </html>
 
-</html>
 
 
