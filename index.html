@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Herramientas CUPS (Privado)</title>
+    <title>Herramientas CUPS (Firebase Cloud)</title>
     <style>
         /* PALETA 60-30-10 (Pastel) */
         :root {
@@ -45,7 +45,6 @@
             justify-content: center;
         }
         .logo img {
-            /* Ajusta la ruta de tu imagen si es necesario */
             content: url("Captura de pantalla 2025-10-09 183230.png");
             width: 100%;
             height: 100%;
@@ -67,7 +66,7 @@
             margin-bottom: 5px;
         }
         
-        /* Estilo para el contador global (Oculto por defecto en el HTML) */
+        /* Estilo para el contador global (Oculto por defecto) */
         .global-counter {
             font-size: 0.9em;
             color: var(--color-texto-general);
@@ -77,7 +76,7 @@
             font-weight: bold;
             opacity: 0.8;
             margin-top: 10px;
-            cursor: pointer; /* Para indicar que se puede cerrar si quieres */
+            cursor: pointer;
         }
 
         h2 {
@@ -403,87 +402,92 @@
     <footer class="page-footer">Creado por Fran T.</footer>
     <div id="snackbar"></div>
 
-    <script>
-        /* ==========================================================
-           CONFIGURACIÓN DEL NAS (BACKEND)
-           ========================================================== */
-        // Asegúrate de poner http:// (no https todavía, para evitar líos de certificados por ahora)
-	const NAS_URL = "https://franti.synology.me/api.php";
+    <script type="module">
+        // ---------------------------------------------------------
+        // 1. IMPORTAR FUNCIONES DE FIREBASE (Enlaces CDN para navegador)
+        // ---------------------------------------------------------
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-analytics.js";
+        import { getDatabase, ref, runTransaction, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
+        // ---------------------------------------------------------
+        // 2. CONFIGURACIÓN FIREBASE (TUS DATOS REALES)
+        // ---------------------------------------------------------
+        const firebaseConfig = {
+            apiKey: "AIzaSyBb10iMuEs-pseqxtWCIWc6rLv1ONfmd8c",
+            authDomain: "generador-cups.firebaseapp.com",
+            projectId: "generador-cups",
+            storageBucket: "generador-cups.firebasestorage.app",
+            messagingSenderId: "426484255342",
+            appId: "1:426484255342:web:af7382b03e04dfd6abf47f",
+            measurementId: "G-58CFJDQ4V7",
+            // AÑADIDO: Esta es la URL estándar. Si no funciona, verifica en tu consola.
+            databaseURL: "https://generador-cups-default-rtdb.firebaseio.com"
+        };
+
+        // Inicializar Firebase
+        const app = initializeApp(firebaseConfig);
+        const analytics = getAnalytics(app); // Iniciamos Analytics como pedía tu código
+        const db = getDatabase(app);
+
+        // ---------------------------------------------------------
+        // 3. LÓGICA DE CONTADORES (BACKEND FIREBASE)
+        // ---------------------------------------------------------
+        
+        // Referencias a los contadores en la base de datos
+        const statsRef = ref(db, 'estadisticas');
         const nasCounterDisplay = document.getElementById('nasCounterDisplay');
 
-        /**
-         * Función para obtener los datos del NAS y MOSTRARLOS
-         * (Solo se llama cuando se escribe la palabra clave)
-         */
-        async function fetchNasStats() {
-            try {
-                // Hacer visible el recuadro
-                nasCounterDisplay.style.display = 'block';
-                nasCounterDisplay.textContent = "Cargando...";
-
-                const response = await fetch(NAS_URL);
-                if (!response.ok) throw new Error("Error red");
-                const data = await response.json();
+        // Función para mostrar estadísticas en tiempo real (Listener)
+        // Se activa cuando el usuario pone "CONTADOR"
+        function escucharEstadisticas() {
+            onValue(statsRef, (snapshot) => {
+                const data = snapshot.val() || { total: 0, generador: 0, calculadora: 0, unicos: 0 };
                 
-                if(data && typeof data.total !== 'undefined') {
-                    nasCounterDisplay.textContent = `📊 Uso Comunidad: ${data.total} usos (Gen: ${data.generador} | Calc: ${data.calculadora})`;
-                }
-            } catch (error) {
-                console.warn("No se pudo conectar al NAS:", error);
-                nasCounterDisplay.textContent = "📊 Error de conexión con el servidor.";
+                // Mostrar en pantalla
+                nasCounterDisplay.style.display = 'block';
+                nasCounterDisplay.innerHTML = `
+                    📊 <strong>Estadísticas Firebase</strong><br>
+                    Total Usos: ${data.total} (Gen: ${data.generador || 0} | Calc: ${data.calculadora || 0})<br>
+                    👥 Usuarios Únicos: ${data.unicos || 0}
+                `;
+            });
+        }
+
+        // Función para incrementar contadores (Transacción segura)
+        async function incrementarFirebase(tipo) {
+            // 1. Incrementar contador específico (generador o calculadora)
+            const especificoRef = ref(db, `estadisticas/${tipo}`);
+            runTransaction(especificoRef, (current) => (current || 0) + 1);
+
+            // 2. Incrementar total global
+            const totalRef = ref(db, `estadisticas/total`);
+            runTransaction(totalRef, (current) => (current || 0) + 1);
+
+            // 3. Gestionar Usuarios Únicos (Local Storage)
+            // Si el usuario no tiene la marca 'app_usada', es nuevo
+            if (!localStorage.getItem('app_usada')) {
+                const unicosRef = ref(db, `estadisticas/unicos`);
+                runTransaction(unicosRef, (current) => (current || 0) + 1);
+                
+                // Le ponemos la marca para no volver a contarlo
+                localStorage.setItem('app_usada', 'true');
             }
         }
 
-        /**
-         * Función para sumar +1 en el NAS (POST)
-         */
-        async function incrementNasCounter(tipo) {
-            try {
-                // NOTA: Al incrementar NO mostramos el contador (lo mantenemos oculto)
-                // A menos que ya estuviera visible.
-                const response = await fetch(NAS_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tipo: tipo })
-                });
-                // No actualizamos la vista si está oculta para mantener la privacidad
-                if (nasCounterDisplay.style.display !== 'none') {
-                    const data = await response.json();
-                    nasCounterDisplay.textContent = `📊 Uso Comunidad: ${data.total} usos (Gen: ${data.generador} | Calc: ${data.calculadora})`;
-                }
-            } catch (error) {
-                console.error("Error guardando en NAS:", error);
-            }
-        }
-
-
-        /* ==========================================================
-           LÓGICA APP
-           ========================================================== */
+        // ---------------------------------------------------------
+        // 4. LÓGICA DE LA APLICACIÓN (FRONTEND)
+        // ---------------------------------------------------------
         
-        // Referencias DOM
+        // Al usar type="module", las funciones no son globales. 
+        // Las asignamos a window para que los botones onclick funcionen.
+        
         const snackbar = document.getElementById('snackbar');
-        const tabGenerador = document.getElementById('tab-generador');
-        const tabCalculadora = document.getElementById('tab-calculadora');
-        const generadorContent = document.getElementById('generador-content');
-        const calculadoraContent = document.getElementById('calculadora-content');
-        
-        const cupsInput = document.getElementById('cupsInput');
-        const quantityInput = document.getElementById('quantityInput');
-        const anterioresList = document.getElementById('anterioresList');
-        const posterioresList = document.getElementById('posterioresList');
-        const originalesDisplay = document.getElementById('originalCupsDisplay');
         const statusMessage = document.getElementById('statusMessage');
-        const anterioresTitle = document.getElementById('anterioresTitle');
-        const posterioresTitle = document.getElementById('posterioresTitle');
-        const exportButton = document.getElementById('exportButton');
-        const calculadoraResults = document.getElementById('calculadoraResults');
 
-        const CUPS_REGEX = /^([A-Z]{2})(\d{4})(\d{12})(?:[A-Z]{2})?([A-Z0-9]{0,2})?/;
+        // --- FUNCIONES LÓGICAS COMUNES ---
         const CUPS_CHAR_TABLE = "TRWAGMYFPDXBNJZSQVHLCKE";
 
-        // --- Funciones Comunes ---
         function showSnackbar(message) {
             snackbar.textContent = message;
             snackbar.classList.add('show');
@@ -497,12 +501,10 @@
                 const C = Math.floor(R0 / 23);
                 const R = R0 % 23;
                 return CUPS_CHAR_TABLE.charAt(C) + CUPS_CHAR_TABLE.charAt(R);
-            } catch (e) {
-                console.error("Error control:", e); return "ER";
-            }
+            } catch (e) { return "ER"; }
         }
 
-        async function copiarAlPortapapeles(textToCopy, btnElement) {
+        window.copiarAlPortapapeles = async function(textToCopy, btnElement) {
             try {
                 await navigator.clipboard.writeText(textToCopy);
                 showSnackbar(`✅ CUPS copiado: ${textToCopy}`);
@@ -510,50 +512,24 @@
                     btnElement.classList.add('copied');
                     btnElement.textContent = '✔';
                 }
-            } catch (err) {
-                console.error('Error copia:', err);
-                alert('❌ Error al copiar.');
-            }
-        }
+            } catch (err) { alert('❌ Error al copiar.'); }
+        };
 
-        function showTab(tabName) {
-            generadorContent.style.display = 'none';
-            calculadoraContent.style.display = 'none';
-            tabGenerador.classList.remove('active');
-            tabCalculadora.classList.remove('active');
+        window.showTab = function(tabName) {
+            document.getElementById('generador-content').style.display = 'none';
+            document.getElementById('calculadora-content').style.display = 'none';
+            document.getElementById('tab-generador').classList.remove('active');
+            document.getElementById('tab-calculadora').classList.remove('active');
             if (tabName === 'generador') {
-                generadorContent.style.display = 'block';
-                tabGenerador.classList.add('active');
-            } else if (tabName === 'calculadora') {
-                calculadoraContent.style.display = 'block';
-                tabCalculadora.classList.add('active');
+                document.getElementById('generador-content').style.display = 'block';
+                document.getElementById('tab-generador').classList.add('active');
+            } else {
+                document.getElementById('calculadora-content').style.display = 'block';
+                document.getElementById('tab-calculadora').classList.add('active');
             }
-        }
+        };
 
-        // --- Funciones Generador ---
-        async function copiarTodoAExcel() {
-            let excelData = "";
-            const tab = '\t'; const newline = '\n'; 
-            const itemsAnteriores = document.querySelectorAll('#anterioresList .cups-item');
-            const itemsPosteriores = document.querySelectorAll('#posterioresList .cups-item');
-            Array.from(itemsAnteriores).reverse().forEach(item => {
-                const cups = item.querySelector('.cups-code').textContent;
-                const nota = item.querySelector('.nota-input').value;
-                excelData += `${cups}${tab}${nota}${newline}`;
-            });
-            itemsPosteriores.forEach(item => {
-                const cups = item.querySelector('.cups-code').textContent;
-                const nota = item.querySelector('.nota-input').value;
-                excelData += `${cups}${tab}${nota}${newline}`;
-            });
-            if (excelData) {
-                try {
-                    await navigator.clipboard.writeText(excelData.trim());
-                    showSnackbar('✅ Copiado para Excel.');
-                } catch (err) { console.error(err); }
-            } else { showSnackbar('ℹ️ Sin datos.'); }
-        }
-
+        // --- GENERADOR ---
         function calculateFullCups(baseNumber, countryCode, distributorCode, optionalEnd) {
             const newNumericPart = baseNumber.toString().padStart(12, '0');
             const dddccccccccccc = distributorCode + newNumericPart;
@@ -561,24 +537,24 @@
             return `${countryCode}${distributorCode}${newNumericPart}${newControlDigits}${optionalEnd || ''}`;
         }
 
-        function generarCups() {
+        window.generarCups = function() {
+            const cupsInput = document.getElementById('cupsInput');
+            const quantityInput = document.getElementById('quantityInput');
             const fullCups = cupsInput.value.trim().toUpperCase();
-            
-            // --- DETECCIÓN DE CÓDIGO SECRETO "CONTADOR" ---
+
+            // DETECCIÓN CÓDIGO SECRETO
             if (fullCups === 'CONTADOR') {
-                fetchNasStats(); // Muestra el contador oculto
-                statusMessage.textContent = "🔓 Acceso a estadísticas concedido.";
+                escucharEstadisticas(); // Activa el listener de Firebase
+                statusMessage.textContent = "🔓 Conectado a Firebase.";
                 statusMessage.style.color = "var(--color-contraste)";
-                return; // Detiene la generación
+                return;
             }
-            // -----------------------------------------------
 
+            // Validaciones
             let quantity = parseInt(quantityInput.value, 10);
-            if (isNaN(quantity) || quantity < 1 || quantity > 50) { 
-                quantity = 10; quantityInput.value = 10;
-            }
-
-            const match = fullCups.match(CUPS_REGEX);
+            if (isNaN(quantity) || quantity < 1 || quantity > 50) quantity = 10;
+            const match = fullCups.match(/^([A-Z]{2})(\d{4})(\d{12})(?:[A-Z]{2})?([A-Z0-9]{0,2})?/);
+            
             if (!match) {
                 statusMessage.textContent = 'Formato CUPS inválido.'; 
                 statusMessage.style.color = "var(--color-error)";
@@ -587,157 +563,126 @@
                 statusMessage.textContent = '';
             }
 
-            // Llamada al NAS (Invisible al usuario normal)
-            incrementNasCounter('generador'); 
+            // INCREMENTAR FIREBASE
+            incrementarFirebase('generador');
 
-            // Limpieza UI
-            anterioresList.innerHTML = '';
-            posterioresList.innerHTML = '';
-            originalesDisplay.style.display = 'none';
-            exportButton.style.display = 'none'; 
-            anterioresTitle.textContent = `${quantity} CUPS Anteriores ⬅️`;
-            posterioresTitle.textContent = `${quantity} CUPS Posteriores ➡️`;
+            // Lógica de generación visual
+            const anterioresList = document.getElementById('anterioresList');
+            const posterioresList = document.getElementById('posterioresList');
+            anterioresList.innerHTML = ''; posterioresList.innerHTML = '';
+            document.getElementById('originalCupsDisplay').style.display = 'none';
+            document.getElementById('exportButton').style.display = 'none';
+            
+            document.getElementById('anterioresTitle').textContent = `${quantity} CUPS Anteriores ⬅️`;
+            document.getElementById('posterioresTitle').textContent = `${quantity} CUPS Posteriores ➡️`;
 
             const [_, countryCode, distributorCode, numericPart, optionalEnd] = match;
             const baseNumber = parseInt(numericPart, 10);
-            
-            for (let i = 1; i <= quantity; i++) {
-                const itemNumber = baseNumber - i;
-                const newCups = calculateFullCups(itemNumber, countryCode, distributorCode, optionalEnd);
-                displayCupsItem(newCups, anterioresList, i);
-            }
-            for (let i = 1; i <= quantity; i++) {
-                const itemNumber = baseNumber + i;
-                const newCups = calculateFullCups(itemNumber, countryCode, distributorCode, optionalEnd);
-                displayCupsItem(newCups, posterioresList, i);
-            }
-            const completeBaseCups = calculateFullCups(baseNumber, countryCode, distributorCode, optionalEnd);
-            originalesDisplay.textContent = `CUPS Original: ${completeBaseCups}`;
-            originalesDisplay.style.display = 'block';
-            exportButton.style.display = 'inline-block';
-        }
 
-        function restablecerTodo() {
-            cupsInput.value = 'ES0022000000000000XX'; 
-            quantityInput.value = '10';
-            anterioresList.innerHTML = '';
-            posterioresList.innerHTML = '';
+            const displayItem = (cups, list, num) => {
+                const div = document.createElement('div'); div.className = 'cups-item';
+                div.innerHTML = `
+                    <div class="cups-info">
+                        <span class="list-number">${num}</span>
+                        <span class="cups-code">${cups}</span>
+                        <input type="text" class="nota-input" maxlength="12">
+                    </div>`;
+                const btn = document.createElement('button'); btn.className = 'copy-btn'; btn.textContent = 'Copiar';
+                btn.onclick = () => window.copiarAlPortapapeles(cups, btn);
+                div.appendChild(btn);
+                list.appendChild(div);
+            };
+
+            for (let i = 1; i <= quantity; i++) {
+                displayItem(calculateFullCups(baseNumber - i, countryCode, distributorCode, optionalEnd), anterioresList, i);
+                displayItem(calculateFullCups(baseNumber + i, countryCode, distributorCode, optionalEnd), posterioresList, i);
+            }
+            
+            const origDiv = document.getElementById('originalCupsDisplay');
+            origDiv.textContent = `CUPS Original: ${calculateFullCups(baseNumber, countryCode, distributorCode, optionalEnd)}`;
+            origDiv.style.display = 'block';
+            document.getElementById('exportButton').style.display = 'inline-block';
+        };
+
+        window.restablecerTodo = function() {
+            document.getElementById('cupsInput').value = 'ES0022000000000000XX';
+            document.getElementById('quantityInput').value = '10';
+            document.getElementById('anterioresList').innerHTML = '';
+            document.getElementById('posterioresList').innerHTML = '';
             statusMessage.textContent = '';
-            originalesDisplay.style.display = 'none';
-            exportButton.style.display = 'none';
+            document.getElementById('originalCupsDisplay').style.display = 'none';
+            document.getElementById('exportButton').style.display = 'none';
+            document.getElementById('nasCounterDisplay').style.display = 'none'; // Ocultar contador
+            document.getElementById('calculadoraResults').innerHTML = '<p>Aquí aparecerán los CUPS válidos...</p>';
+        };
+
+        window.copiarTodoAExcel = async function() {
+            // (Misma lógica de Excel anterior...)
+            let excelData = ""; const tab = '\t'; const newline = '\n';
+            const items = [...document.querySelectorAll('#anterioresList .cups-item')].reverse()
+                .concat([...document.querySelectorAll('#posterioresList .cups-item')]);
             
-            // Al restablecer, volvemos a ocultar el contador
-            nasCounterDisplay.style.display = 'none';
-            calculadoraResults.innerHTML = '<p>Aquí aparecerán los CUPS válidos...</p>';
-        }
+            items.forEach(item => {
+                excelData += `${item.querySelector('.cups-code').textContent}${tab}${item.querySelector('.nota-input').value}${newline}`;
+            });
+            
+            if (excelData) {
+                try { await navigator.clipboard.writeText(excelData.trim()); showSnackbar('✅ Copiado para Excel.'); }
+                catch (e) { console.error(e); }
+            }
+        };
 
-        function displayCupsItem(cupsCode, targetList, listNumber) {
-            const itemDiv = document.createElement('div');
-            itemDiv.classList.add('cups-item');
-            const cupsInfo = document.createElement('div');
-            cupsInfo.classList.add('cups-info');
-            const numberSpan = document.createElement('span');
-            numberSpan.classList.add('list-number');
-            numberSpan.textContent = listNumber;
-            const cupsSpan = document.createElement('span');
-            cupsSpan.classList.add('cups-code');
-            cupsSpan.textContent = cupsCode;
-            cupsInfo.appendChild(numberSpan);
-            cupsInfo.appendChild(cupsSpan);
-            const notaInput = document.createElement('input');
-            notaInput.type = 'text';
-            notaInput.classList.add('nota-input');
-            notaInput.maxLength = 12;
-            cupsInfo.appendChild(notaInput);
-            const copyButton = document.createElement('button');
-            copyButton.classList.add('copy-btn');
-            copyButton.textContent = 'Copiar';
-            copyButton.onclick = () => copiarAlPortapapeles(cupsCode, copyButton);
-            itemDiv.appendChild(cupsInfo);
-            itemDiv.appendChild(copyButton);
-            targetList.appendChild(itemDiv);
-        }
-
-        // --- Funciones Calculadora ---
-        function updateInputView() {
+        // --- CALCULADORA ---
+        window.updateInputView = function() {
             const mode = document.getElementById('modeSelect').value;
-            if (mode === '3') {
-                document.getElementById('inputGroup3').style.display = 'flex';
-                document.getElementById('inputGroup4').style.display = 'none';
-            } else {
-                document.getElementById('inputGroup3').style.display = 'none';
-                document.getElementById('inputGroup4').style.display = 'flex';
-            }
-            calculadoraResults.innerHTML = '<p>Aquí aparecerán los CUPS válidos...</p>';
-        }
+            document.getElementById('inputGroup3').style.display = mode === '3' ? 'flex' : 'none';
+            document.getElementById('inputGroup4').style.display = mode === '4' ? 'flex' : 'none';
+            document.getElementById('calculadoraResults').innerHTML = '<p>Aquí aparecerán los CUPS válidos...</p>';
+        };
 
-        function findValidCups() {
+        window.findValidCups = function() {
             const mode = document.getElementById('modeSelect').value;
-            
-            // --- DETECCIÓN DE CÓDIGO SECRETO "CONTADOR" EN CALCULADORA ---
-            const secretCheck1 = document.getElementById('cupsP1_3').value.trim().toUpperCase();
-            const secretCheck2 = document.getElementById('cupsP1_4').value.trim().toUpperCase();
-            
-            if (secretCheck1 === 'CONTADOR' || secretCheck2 === 'CONTADOR') {
-                fetchNasStats(); // Muestra el contador oculto
-                calculadoraResults.innerHTML = "<p>🔓 <strong>Acceso a estadísticas concedido.</strong> Mira en la cabecera.</p>";
-                return; // Detiene el cálculo
-            }
-            // --------------------------------------------------------------
+            const resDiv = document.getElementById('calculadoraResults');
 
-            let p1_known, p2_suffix, p1_length, loopMax, padLength, errorMsg;
+            // DETECCIÓN SECRETO EN CALCULADORA
+            const s1 = document.getElementById('cupsP1_3').value.trim().toUpperCase();
+            const s2 = document.getElementById('cupsP1_4').value.trim().toUpperCase();
+            if (s1 === 'CONTADOR' || s2 === 'CONTADOR') {
+                escucharEstadisticas();
+                resDiv.innerHTML = "<p>🔓 <strong>Conectado a Firebase.</strong> Mira arriba.</p>";
+                return;
+            }
+
+            // INCREMENTAR FIREBASE
+            incrementarFirebase('calculadora');
+
+            let p1, p2, len, max, pad, msg;
             if (mode === '3') {
-                p1_known = document.getElementById('cupsP1_3').value;
-                p2_suffix = document.getElementById('cupsP2_3').value.toUpperCase();
-                p1_length = 9; loopMax = 999; padLength = 3;
-                errorMsg = '<p class="error">Error: 9 dígitos numéricos.</p>';
-                calculadoraResults.innerHTML = "<p>Calculando...</p>";
+                p1 = document.getElementById('cupsP1_3').value; p2 = document.getElementById('cupsP2_3').value.toUpperCase();
+                len = 9; max = 999; pad = 3; msg = '9 dígitos';
             } else {
-                p1_known = document.getElementById('cupsP1_4').value;
-                p2_suffix = document.getElementById('cupsP2_4').value.toUpperCase();
-                p1_length = 8; loopMax = 9999; padLength = 4;
-                errorMsg = '<p class="error">Error: 8 dígitos numéricos.</p>';
-                calculadoraResults.innerHTML = "<p>Calculando...</p>";
+                p1 = document.getElementById('cupsP1_4').value; p2 = document.getElementById('cupsP2_4').value.toUpperCase();
+                len = 8; max = 9999; pad = 4; msg = '8 dígitos';
             }
 
-            if (p1_known.length !== p1_length || !/^\d+$/.test(p1_known)) {
-                calculadoraResults.innerHTML = errorMsg; return;
-            }
-            if (p2_suffix.length !== 6) {
-                 calculadoraResults.innerHTML = '<p class="error">Error formato YYYYCC.</p>'; return;
-            }
+            resDiv.innerHTML = "<p>Calculando...</p>";
+            if (p1.length !== len || !/^\d+$/.test(p1)) { resDiv.innerHTML = `<p class="error">Error: ${msg}</p>`; return; }
+            if (p2.length !== 6) { resDiv.innerHTML = '<p class="error">Error YYYYCC</p>'; return; }
 
-            // Llamada al NAS (Invisible al usuario normal)
-            incrementNasCounter('calculadora');
+            const p3 = p2.substring(0, 4);
+            const ctrl = p2.substring(4, 6);
+            const results = [];
 
-            const p3_known = p2_suffix.substring(0, 4);
-            const expectedControls = p2_suffix.substring(4, 6);
-            const validResults = [];
-            for (let i = 0; i <= loopMax; i++) {
-                const p2_unknown = i.toString().padStart(padLength, '0');
-                const N_string = p1_known + p2_unknown + p3_known;
-                const calculatedControls = calcularDigitosControl(N_string);
-                if (calculatedControls === expectedControls) {
-                    validResults.push("ES" + p1_known + p2_unknown + p3_known + expectedControls);
+            for (let i = 0; i <= max; i++) {
+                const unknown = i.toString().padStart(pad, '0');
+                const full = p1 + unknown + p3;
+                if (calcularDigitosControl(full) === ctrl) {
+                    results.push("ES" + p1 + unknown + p3 + ctrl);
                 }
             }
-            if (validResults.length > 0) {
-                calculadoraResults.innerHTML = validResults.join('<br>');
-            } else {
-                calculadoraResults.innerHTML = "<p>No se encontraron.</p>";
-            }
-        }
-
-        // Hacer globales
-        window.copiarAlPortapapeles = copiarAlPortapapeles;
-        window.generarCups = generarCups;
-        window.restablecerTodo = restablecerTodo;
-        window.copiarTodoAExcel = copiarTodoAExcel;
-        window.findValidCups = findValidCups; 
-        window.updateInputView = updateInputView;
-        window.showTab = showTab;
+            
+            resDiv.innerHTML = results.length > 0 ? results.join('<br>') : "<p>No se encontraron.</p>";
+        };
     </script>
 </body>
 </html>
-
-
